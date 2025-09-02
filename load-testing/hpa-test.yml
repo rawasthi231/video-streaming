@@ -1,0 +1,81 @@
+config:
+  target: http://localhost:8080
+  phases:
+    # Baseline phase: low load to establish baseline
+    - duration: 60  # 1 minute
+      arrivalRate: 5
+      name: "Baseline phase"
+    
+    # Trigger scaling: CPU-intensive load to trigger HPA
+    - duration: 240  # 4 minutes
+      arrivalRate: 5
+      rampTo: 30
+      name: "HPA trigger phase"
+    
+    # Sustained high load: maintain load to observe scaling
+    - duration: 300  # 5 minutes
+      arrivalRate: 30
+      name: "Sustained scaling phase"
+    
+    # Peak burst: maximum load to test scaling limits
+    - duration: 180  # 3 minutes
+      arrivalRate: 50
+      name: "Peak load phase"
+    
+    # Scale down: reduce load to test scale-down behavior
+    - duration: 240  # 4 minutes
+      arrivalRate: 50
+      rampTo: 5
+      name: "Scale-down phase"
+
+  environments:
+    local:
+      target: http://localhost:8080
+    kubernetes:
+      target: http://localhost:30080
+    docker:
+      target: http://localhost:8082
+
+  defaults:
+    headers:
+      User-Agent: "HPA Load Tester"
+
+scenarios:
+  # CPU Intensive scenario to drive HPA scaling
+  - name: "CPU Intensive Workload"
+    weight: 60
+    flow:
+      - get:
+          url: "/burn?ms=2000"
+      - think: 1
+      - get:
+          url: "/burn?ms=1500"
+      - think: 1
+      - get:
+          url: "/burn?ms=2500"
+      - think: 2
+
+  # Video streaming load to simulate real users
+  - name: "Video Streaming Load"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/v1/videos"
+      - think: 1
+      - get:
+          url: "/video/master.m3u8"
+      - think: 2
+      - get:
+          url: "/burn?ms=800"  # Simulate processing
+      - think: 3
+
+  # Health monitoring during load
+  - name: "Health Monitor"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+      - think: 1
+      - get:
+          url: "/metrics"
+      - think: 5

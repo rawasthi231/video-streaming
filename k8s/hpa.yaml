@@ -1,16 +1,16 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: video-demo-hpa
+  name: video-streaming-hpa
   labels:
-    app: video-demo
+    app: video-streaming-app
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: video-demo
+    name: video-streaming-app
   minReplicas: 1
-  maxReplicas: 10
+  maxReplicas: 5  # Reduced for Docker Desktop memory limits
   metrics:
     - type: Resource
       resource:

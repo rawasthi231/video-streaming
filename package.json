@@ -9,14 +9,25 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "dev": "nodemon --watch src --ext ts,js,json --exec node --loader ts-node/esm ./src/server.ts",
+    "dev": "NODE_NO_WARNINGS=1 nodemon --watch src --ext ts,js,json --exec node --loader ts-node/esm ./src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
     "test": "jest",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "load:quick": "artillery run load-testing/artillery-simple.yml",
+    "load:full": "artillery run load-testing/artillery-config.yml",
+    "load:local": "artillery run -e local load-testing/artillery-simple.yml",
+    "load:k8s": "artillery run -e kubernetes load-testing/artillery-simple.yml",
+    "load:docker": "artillery run -e docker load-testing/artillery-simple.yml",
+    "load:custom": "node load-testing/load-tester.js",
+    "load:custom:k8s": "TARGET_URL=http://localhost:30080 node load-testing/load-tester.js",
+    "load:hpa": "artillery run load-testing/hpa-test.yml",
+    "load:moderate": "artillery run -e kubernetes load-testing/artillery-moderate.yml",
+    "monitor:k8s": "./load-testing/monitor-availability.sh http://localhost:30080 5",
+    "monitor:users": "./load-testing/user-stats.sh http://localhost:30080 3"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -47,6 +58,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.18.1",
     "@typescript-eslint/parser": "^6.18.1",
+    "artillery": "^2.0.24",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",

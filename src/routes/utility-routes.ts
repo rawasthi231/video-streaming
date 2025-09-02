@@ -78,6 +78,18 @@ router.get(
 
 /**
  * @swagger
+ * /users:
+ *   get:
+ *     summary: Get concurrent users statistics
+ *     tags: [Utilities]
+ *     responses:
+ *       200:
+ *         description: Concurrent user statistics retrieved successfully
+ */
+router.get('/users', asyncHandler(utilityController.getConcurrentUsers));
+
+/**
+ * @swagger
  * /system:
  *   get:
  *     summary: Get system information

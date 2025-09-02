@@ -1,20 +1,21 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: video-demo-svc
+  name: video-streaming-service
   labels:
-    app: video-demo
+    app: video-streaming-app
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
-    app: video-demo
+    app: video-streaming-app
   ports:
     - name: http
       port: 80
       targetPort: 8080
+      nodePort: 30080  # Fixed external port
       protocol: TCP
   sessionAffinity: None

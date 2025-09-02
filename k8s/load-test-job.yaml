@@ -1,0 +1,194 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: video-streaming-load-test
+  namespace: default
+  labels:
+    app: load-test
+    component: artillery
+spec:
+  # Run multiple pods for distributed load testing
+  parallelism: 3
+  completions: 3
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: load-test
+        component: artillery
+    spec:
+      restartPolicy: Never
+      serviceAccountName: load-test-sa
+      
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      containers:
+      - name: artillery-load-test
+        image: artilleryio/artillery:latest
+        command: ["artillery"]
+        args: 
+          - "run"
+          - "--environment"
+          - "kubernetes"
+          - "/config/hpa-test.yml"
+        
+        # Container-level security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+            - ALL
+        
+        # Resource limits to control load test resource usage
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # Mount configuration
+        volumeMounts:
+        - name: artillery-config
+          mountPath: /config
+          readOnly: true
+        
+        # Environment variables
+        env:
+        - name: TARGET_SERVICE
+          value: "video-streaming-service.default.svc.cluster.local:8080"
+        - name: TEST_DURATION
+          value: "600"  # 10 minutes
+        - name: WORKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+      volumes:
+      - name: artillery-config
+        configMap:
+          name: artillery-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: artillery-config
+  namespace: default
+data:
+  hpa-test.yml: |
+    config:
+      target: http://video-streaming-service.default.svc.cluster.local:8080
+      phases:
+        # HPA trigger phase
+        - duration: 120  # 2 minutes
+          arrivalRate: 5
+          rampTo: 20
+          name: "HPA trigger phase"
+        
+        # Sustained load phase
+        - duration: 240  # 4 minutes
+          arrivalRate: 20
+          name: "Sustained load phase"
+        
+        # Peak load phase
+        - duration: 120  # 2 minutes
+          arrivalRate: 35
+          name: "Peak load phase"
+        
+        # Scale-down phase
+        - duration: 120  # 2 minutes
+          arrivalRate: 35
+          rampTo: 2
+          name: "Scale-down phase"
+
+      defaults:
+        headers:
+          User-Agent: "K8s Artillery Load Tester"
+
+    scenarios:
+      # CPU intensive workload to trigger HPA
+      - name: "CPU Burner"
+        weight: 70
+        flow:
+          - get:
+              url: "/burn?ms=2000"
+          - think: 1
+          - get:
+              url: "/burn?ms=3000"
+          - think: 2
+
+      # Video streaming simulation
+      - name: "Video Streaming"
+        weight: 20
+        flow:
+          - get:
+              url: "/api/v1/videos"
+          - think: 1
+          - get:
+              url: "/video/master.m3u8"
+          - think: 3
+
+      # Health checks
+      - name: "Health Monitor"
+        weight: 10
+        flow:
+          - get:
+              url: "/health"
+          - think: 2
+          - get:
+              url: "/metrics"
+          - think: 5
+
+---
+# ServiceAccount for the load test job (if needed)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: load-test-sa
+  namespace: default
+
+---
+# Role and RoleBinding for load test monitoring (optional)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: load-test-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: load-test-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: load-test-sa
+  namespace: default
+roleRef:
+  kind: Role
+  name: load-test-role
+  apiGroup: rbac.authorization.k8s.io

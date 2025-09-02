@@ -43,6 +43,9 @@ RUN npm ci --only=production --omit=dev && \
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Copy frontend assets
+COPY public ./public
+
 # Copy existing HLS content
 COPY hls ./hls
 

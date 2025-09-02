@@ -1,0 +1,81 @@
+config:
+  target: http://localhost:8080
+  phases:
+    # Gentle validation phase
+    - duration: 60  # 1 minute
+      arrivalRate: 2
+      rampTo: 5
+      name: "Gentle validation test"
+    
+    # Moderate ramp-up phase  
+    - duration: 120  # 2 minutes
+      arrivalRate: 5
+      rampTo: 15
+      name: "Moderate ramp-up phase"
+    
+    # Sustained moderate load phase
+    - duration: 180  # 3 minutes
+      arrivalRate: 15
+      name: "Sustained moderate load phase"
+    
+    # Peak moderate phase: trigger scaling without overwhelming
+    - duration: 90   # 1.5 minutes
+      arrivalRate: 25
+      name: "Peak moderate phase"
+
+  environments:
+    local:
+      target: http://localhost:8080
+    kubernetes:
+      target: http://localhost:30080  # NodePort for direct cluster access
+    docker:
+      target: http://localhost:8082
+
+  defaults:
+    headers:
+      User-Agent: "Artillery Moderate Load Tester"
+
+scenarios:
+  # Basic browsing scenario - most traffic
+  - name: "Homepage Browser"
+    weight: 50
+    flow:
+      - get:
+          url: "/"
+      - think: 3
+      - get:
+          url: "/videos"
+      - think: 5
+
+  # Video API scenario
+  - name: "Video API User"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/v1/videos"
+      - think: 2
+      - get:
+          url: "/api/v1/videos?page=2&limit=10"
+      - think: 3
+
+  # Moderate CPU load scenario - reduced intensity
+  - name: "Moderate CPU Load"
+    weight: 15
+    flow:
+      - get:
+          url: "/burn?ms=500"  # Reduced from 1000-2000ms
+      - think: 5
+      - get:
+          url: "/burn?ms=300"  # Much lighter load
+      - think: 4
+
+  # Health checks scenario
+  - name: "Health Checker"
+    weight: 5
+    flow:
+      - get:
+          url: "/health"
+      - think: 2
+      - get:
+          url: "/metrics"
+      - think: 3

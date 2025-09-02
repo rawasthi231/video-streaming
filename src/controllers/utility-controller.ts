@@ -5,6 +5,7 @@ import { logger } from '../config/logger.js';
 import { ENV } from '../config/env.js';
 import { ApiResponse } from '../types/index.js';
 import { AppError } from '../middlewares/error-handler.js';
+import { userTracker } from '../middlewares/concurrent-users.js';
 
 export class UtilityController {
   // Health check endpoint for liveness probe
@@ -119,6 +120,25 @@ export class UtilityController {
       res.json(response);
     } catch (error) {
       throw new AppError('CPU burn failed', 500, 'CPU_BURN_ERROR');
+    }
+  };
+
+  // Get concurrent users statistics
+  getConcurrentUsers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const stats = userTracker.getCurrentStats();
+      
+      const response: ApiResponse<typeof stats> = {
+        success: true,
+        data: stats,
+        meta: {
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      throw new AppError('Failed to get concurrent user stats', 500, 'CONCURRENT_USERS_ERROR');
     }
   };
 

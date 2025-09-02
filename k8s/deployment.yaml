@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: video-demo
+  name: video-streaming-app
   labels:
-    app: video-demo
+    app: video-streaming-app
     version: v1
 spec:
   replicas: 1
@@ -14,11 +14,11 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      app: video-demo
+      app: video-streaming-app
   template:
     metadata:
       labels:
-        app: video-demo
+        app: video-streaming-app
         version: v1
       annotations:
         prometheus.io/scrape: "true"
@@ -53,33 +53,37 @@ spec:
               value: "8080"
             - name: LOG_LEVEL
               value: "info"
+            - name: RATE_LIMIT_MAX_REQUESTS
+              value: "10000"  # High limit for load testing
+            - name: RATE_LIMIT_WINDOW_MS
+              value: "60000"   # 1 minute window
           resources:
             requests:
-              cpu: "200m"
-              memory: "256Mi"
+              cpu: "100m"   # Reduced for more pods
+              memory: "128Mi" # Reduced for more pods
             limits:
-              cpu: "1000m"
-              memory: "512Mi"
+              cpu: "1000m"   # Sufficient for load testing
+              memory: "256Mi" # Reduced to fit more pods
           readinessProbe:
             httpGet:
               path: /ready
               port: 8080
               scheme: HTTP
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 3
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
             successThreshold: 1
-            failureThreshold: 3
+            failureThreshold: 5
           livenessProbe:
             httpGet:
               path: /health
               port: 8080
               scheme: HTTP
-            initialDelaySeconds: 15
-            periodSeconds: 20
-            timeoutSeconds: 3
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 15
             successThreshold: 1
-            failureThreshold: 3
+            failureThreshold: 5
           volumeMounts:
             - name: tmp
               mountPath: /tmp

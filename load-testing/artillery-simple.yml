@@ -1,0 +1,81 @@
+config:
+  target: http://localhost:8080
+  phases:
+    # Quick test phase for validation
+    - duration: 60  # 1 minute
+      arrivalRate: 5
+      rampTo: 20
+      name: "Quick validation test"
+    
+    # Ramp-up phase: gradually increase load  
+    - duration: 180  # 3 minutes
+      arrivalRate: 20
+      rampTo: 50
+      name: "Ramp-up phase"
+    
+    # Sustained load phase: maintain high load
+    - duration: 300  # 5 minutes
+      arrivalRate: 50
+      name: "Sustained load phase"
+    
+    # Peak burst phase: simulate traffic spikes for HPA
+    - duration: 120   # 2 minutes
+      arrivalRate: 100
+      name: "Peak burst phase"
+
+  environments:
+    local:
+      target: http://localhost:8080
+    kubernetes:
+      target: http://localhost:30080  # NodePort for direct cluster access
+    docker:
+      target: http://localhost:8082
+
+  defaults:
+    headers:
+      User-Agent: "Artillery Load Tester"
+
+scenarios:
+  # Basic browsing scenario
+  - name: "Homepage Browser"
+    weight: 30
+    flow:
+      - get:
+          url: "/"
+      - think: 2
+      - get:
+          url: "/videos"
+      - think: 3
+
+  # Video API scenario
+  - name: "Video API User"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/v1/videos"
+      - think: 1
+      - get:
+          url: "/api/v1/videos?page=2&limit=20"
+      - think: 2
+
+  # CPU intensive scenario for HPA testing
+  - name: "CPU Burner"
+    weight: 20
+    flow:
+      - get:
+          url: "/burn?ms=1000"
+      - think: 3
+      - get:
+          url: "/burn?ms=1500"
+      - think: 2
+
+  # Health checks scenario
+  - name: "Health Checker"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+      - think: 1
+      - get:
+          url: "/metrics"
+      - think: 2

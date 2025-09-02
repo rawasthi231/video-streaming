@@ -1,4 +1,4 @@
-# 🎥 Video Autoscale Demo
+# 🎥 Video streaming Demo
 
 A production-ready video streaming service built with Express.js and TypeScript that demonstrates Kubernetes Horizontal Pod Autoscaler (HPA) capabilities. The application converts uploaded videos to HLS format for adaptive streaming and includes comprehensive monitoring and load testing features.
 
@@ -18,13 +18,17 @@ A production-ready video streaming service built with Express.js and TypeScript 
 
 ## ✨ Features
 
-- **Video Streaming**: Upload and stream videos in HLS format
-- **Auto-scaling**: Kubernetes HPA based on CPU and memory metrics
-- **Security**: Rate limiting, CORS, Helmet security headers
-- **Monitoring**: Prometheus metrics and health checks
-- **Load Testing**: Built-in endpoints for testing autoscaling
-- **API Documentation**: Swagger/OpenAPI documentation
-- **Production Ready**: Multi-stage Docker build with security best practices
+- **🎬 Modern UI**: Hotstar-inspired dark theme with responsive design
+- **📱 Single Page App**: Client-side routing with smooth navigation
+- **🎥 Video Streaming**: Upload and stream videos in HLS format with adaptive quality
+- **📤 Drag & Drop Upload**: Modern upload interface with progress tracking
+- **🔍 Search & Filter**: Real-time video search and category filtering
+- **⚡ Auto-scaling**: Kubernetes HPA based on CPU and memory metrics
+- **🔒 Security**: Rate limiting, CORS, Helmet security headers
+- **📊 Monitoring**: Prometheus metrics and health checks
+- **🔥 Load Testing**: Built-in endpoints for testing autoscaling
+- **📚 API Documentation**: Swagger/OpenAPI documentation
+- **🚀 Production Ready**: Multi-stage Docker build with security best practices
 
 ## 🔧 Prerequisites
 
@@ -171,13 +175,13 @@ npm start
 
 ```bash
 # Build Docker image
-docker build -t video-autoscale:latest .
+docker build -t video-streaming:latest .
 
 # Run container locally
 docker run -p 8080:8080 \
-  --name video-demo \
+  --name video-streaming-app \
   -e NODE_ENV=production \
-  video-autoscale:latest
+  video-streaming:latest
 
 # Test the application
 curl http://localhost:8080/health
@@ -217,11 +221,11 @@ kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system 
 
 ```bash
 # Build the Docker image
-docker build -t video-autoscale:latest .
+docker build -t video-streaming:latest .
 
 # For Docker Desktop Kubernetes, the image is automatically available
 # Verify image exists
-docker images | grep video-autoscale
+docker images | grep video-streaming
 ```
 
 ### Deploy to Kubernetes
@@ -236,48 +240,48 @@ kubectl apply -f k8s/service.yaml
 kubectl apply -f k8s/hpa.yaml
 
 # Verify deployment
-kubectl get pods -l app=video-demo
-kubectl get svc video-demo-svc
-kubectl get hpa video-demo-hpa
+kubectl get pods -l app=video-streaming-app
+kubectl get svc video-streaming-service
+kubectl get hpa video-streaming-hpa
 ```
 
 ### Check Deployment Status
 
 ```bash
 # Monitor deployment rollout
-kubectl rollout status deployment/video-demo
+kubectl rollout status deployment/video-streaming-app
 
 # Check pod logs
-kubectl logs -l app=video-demo -f
+kubectl logs -l app=video-streaming-app -f
 
 # Describe pod for troubleshooting
-kubectl describe pod -l app=video-demo
+kubectl describe pod -l app=video-streaming-app
 ```
 
 ### Access the Application
 
 ```bash
 # Get service external IP (LoadBalancer)
-kubectl get svc video-demo-svc
+kubectl get svc video-streaming-service
 
 # For Docker Desktop, access via localhost
 # The service will be available at: http://localhost:80
 
 # Or use port-forward for direct access
-kubectl port-forward svc/video-demo-svc 8080:80
+kubectl port-forward svc/video-streaming-service 8080:80
 ```
 
 ### Verify HPA Configuration
 
 ```bash
 # Check HPA status
-kubectl get hpa video-demo-hpa
+kubectl get hpa video-streaming-hpa
 
 # Monitor HPA in real-time
-kubectl get hpa video-demo-hpa --watch
+kubectl get hpa video-streaming-hpa --watch
 
 # Detailed HPA information
-kubectl describe hpa video-demo-hpa
+kubectl describe hpa video-streaming-hpa
 ```
 
 ## 📚 API Documentation
@@ -360,13 +364,13 @@ chmod +x load-test.sh
 
 ```bash
 # Watch HPA scaling decisions
-kubectl get hpa video-demo-hpa --watch
+kubectl get hpa video-streaming-hpa --watch
 
 # Monitor pod scaling
-watch kubectl get pods -l app=video-demo
+watch kubectl get pods -l app=video-streaming-app
 
 # Check resource usage
-kubectl top pods -l app=video-demo
+kubectl top pods -l app=video-streaming-app
 kubectl top nodes
 ```
 
@@ -390,7 +394,7 @@ The application exposes Prometheus metrics at `/metrics`:
 
 ```bash
 # View application logs
-kubectl logs -l app=video-demo -f
+kubectl logs -l app=video-streaming-app -f
 
 # View logs from specific pod
 kubectl logs <pod-name> -f
@@ -417,48 +421,48 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 
 ```bash
 # Check HPA events
-kubectl describe hpa video-demo-hpa
+kubectl describe hpa video-streaming-hpa
 
 # Verify metrics are available
 kubectl top pods
 
 # Check pod resource requests/limits
-kubectl describe pod -l app=video-demo
+kubectl describe pod -l app=video-streaming-app
 ```
 
 #### 3. Image Pull Issues
 
 ```bash
 # Rebuild and ensure image is available
-docker build -t video-autoscale:latest .
-docker images | grep video-autoscale
+docker build -t video-streaming:latest .
+docker images | grep video-streaming
 
 # For production, push to container registry
-# docker tag video-autoscale:latest your-registry/video-autoscale:latest
-# docker push your-registry/video-autoscale:latest
+# docker tag video-streaming:latest your-registry/video-streaming:latest
+# docker push your-registry/video-streaming:latest
 ```
 
 #### 4. Service Not Accessible
 
 ```bash
 # Check service status
-kubectl get svc video-demo-svc
+kubectl get svc video-streaming-service
 
 # Use port-forward for direct access
-kubectl port-forward svc/video-demo-svc 8080:80
+kubectl port-forward svc/video-streaming-service 8080:80
 
 # Check pod logs for errors
-kubectl logs -l app=video-demo
+kubectl logs -l app=video-streaming-app
 ```
 
 ### Debug Commands
 
 ```bash
 # Get all resources
-kubectl get all -l app=video-demo
+kubectl get all -l app=video-streaming-app
 
 # Describe deployment for detailed information
-kubectl describe deployment video-demo
+kubectl describe deployment video-streaming-app
 
 # Check events in the namespace
 kubectl get events --sort-by=.metadata.creationTimestamp
@@ -476,22 +480,22 @@ kubectl exec -it <pod-name> -- /bin/sh
 kubectl delete -f k8s/
 
 # Or delete individually
-kubectl delete hpa video-demo-hpa
-kubectl delete svc video-demo-svc
-kubectl delete deployment video-demo
+kubectl delete hpa video-streaming-hpa
+kubectl delete svc video-streaming-service
+kubectl delete deployment video-streaming-app
 
 # Verify cleanup
-kubectl get all -l app=video-demo
+kubectl get all -l app=video-streaming-app
 ```
 
 ### Clean Docker Resources
 
 ```bash
 # Remove containers
-docker rm -f video-demo
+docker rm -f video-streaming-app
 
 # Remove image
-docker rmi video-autoscale:latest
+docker rmi video-streaming:latest
 
 # Clean up Docker system (optional)
 docker system prune -f
@@ -504,7 +508,7 @@ docker system prune -f
 1. **Baseline Test**:
    ```bash
    # Check initial pod count
-   kubectl get pods -l app=video-demo
+   kubectl get pods -l app=video-streaming-app
    ```
 
 2. **Load Generation**:
@@ -518,10 +522,10 @@ docker system prune -f
 3. **Monitor Scaling**:
    ```bash
    # Watch HPA decisions
-   kubectl get hpa video-demo-hpa --watch
+   kubectl get hpa video-streaming-hpa --watch
    
    # Monitor resource usage
-   kubectl top pods -l app=video-demo
+   kubectl top pods -l app=video-streaming-app
    ```
 
 ### Expected Scaling Behavior
@@ -596,8 +600,8 @@ For production deployment:
 1. **Container Registry**:
    ```bash
    # Tag and push to your registry
-   docker tag video-autoscale:latest your-registry.com/video-autoscale:v1.0.0
-   docker push your-registry.com/video-autoscale:v1.0.0
+   docker tag video-streaming:latest your-registry.com/video-streaming:v1.0.0
+   docker push your-registry.com/video-streaming:v1.0.0
    ```
 
 2. **Update Kubernetes Manifests**:

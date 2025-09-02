@@ -11,6 +11,7 @@ import { ENV, CONSTANTS } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { metricsMiddleware } from "./config/metrics.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
+import { concurrentUserMiddleware } from "./middlewares/concurrent-users.js";
 import { videoRoutes } from "./routes/video-routes.js";
 import { utilityRoutes } from "./routes/utility-routes.js";
 
@@ -37,13 +38,20 @@ app.use(
       useDefaults: true,
       directives: {
         "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
+        "script-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+        "worker-src": ["'self'", "blob:"],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com",
+        ],
+        "font-src": ["'self'", "https://fonts.gstatic.com"],
         "img-src": ["'self'", "data:", "blob:"],
         "media-src": ["'self'", "blob:"],
         "connect-src": ["'self'"],
       },
     },
+    frameguard: { action: "deny" },
   })
 );
 
@@ -83,6 +91,9 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Metrics middleware
 app.use(metricsMiddleware());
 
+// Concurrent user tracking middleware
+app.use(concurrentUserMiddleware());
+
 // Request ID middleware
 app.use((req, res, next) => {
   req.headers["x-request-id"] =
@@ -96,7 +107,7 @@ const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "Video Autoscale Demo API",
+      title: "Video Streaming Autoscale Demo API",
       version: "1.0.0",
       description: "A video streaming service with Kubernetes HPA autoscaling",
       contact: {
@@ -112,31 +123,64 @@ const swaggerOptions = {
         url: "http://localhost:30080",
         description: "Kubernetes NodePort service",
       },
+      {
+        url: "http://localhost:8082",
+        description: "Kubernetes NodePort service",
+      },
     ],
   },
   apis: ["./src/routes/*.ts"],
 };
 
 const specs = swaggerJsdoc(swaggerOptions);
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(specs));
+// Serve the OpenAPI JSON explicitly to avoid proxy/port issues
+app.get("/docs/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(specs);
+});
 
-// Static file serving for HLS content
+// Configure Swagger UI to fetch the spec from the same-origin JSON endpoint
+app.use(
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(undefined, {
+    swaggerUrl: "/docs/openapi.json",
+    explorer: true,
+  })
+);
+
+// Static file serving for HLS content and video directories
 app.use(
   "/video",
   express.static(path.join(process.cwd(), "hls"), {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith(".ts") || filePath.endsWith(".m4s")) {
         res.setHeader("Cache-Control", "public, max-age=3600, immutable");
+        res.setHeader("Access-Control-Allow-Origin", "*");
       } else if (filePath.endsWith(".m3u8")) {
         res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
         res.setHeader("Cache-Control", "public, max-age=5");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+      } else if (filePath.endsWith(".jpg") || filePath.endsWith(".png")) {
+        res.setHeader("Content-Type", filePath.endsWith(".jpg") ? "image/jpeg" : "image/png");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.setHeader("Access-Control-Allow-Origin", "*");
       }
     },
   })
 );
 
-// Static files for thumbnails and other assets
+// Static files for frontend assets
+app.use("/css", express.static("public/css"));
+app.use("/js", express.static("public/js"));
+app.use("/images", express.static("public/images"));
+app.use("/fonts", express.static("public/fonts"));
 app.use("/static", express.static("src/static"));
+
+// Service worker
+app.get("/sw.js", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "sw.js"));
+});
 
 // API routes
 app.use(CONSTANTS.API_PREFIX + "/videos", videoRoutes);
@@ -144,10 +188,16 @@ app.use(CONSTANTS.API_PREFIX + "/videos", videoRoutes);
 // Utility routes (health, metrics, etc.)
 app.use("/", utilityRoutes);
 
-// app.get("/favicon.ico", (_, res) => res.status(204).end());
+// Serve frontend for SPA routes
+const frontendRoutes = ["/", "/videos", "/upload", "/watch/*"];
 
-// Demo landing page
-app.get("/", (req, res) => {
+// Handle SPA routing - serve index.html for frontend routes
+app.get(frontendRoutes, (req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "index.html"));
+});
+
+// Legacy demo page (for API testing)
+app.get("/api-demo", (req, res) => {
   res.setHeader("Content-Type", "text/html");
   res.end(`
 <!DOCTYPE html>
@@ -155,23 +205,25 @@ app.get("/", (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Autoscale Demo</title>
+    <title>Video Autoscale Demo - API Testing</title>
     <link rel="icon" href="/static/favicon.ico" />
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #0f1419; color: #fff; }
         .video-container { margin: 20px 0; }
-        .api-links { background: #f5f5f5; padding: 15px; border-radius: 5px; }
-        .api-links a { display: block; margin: 5px 0; color: #0066cc; }
-        code { background: #e9e9e9; padding: 2px 5px; border-radius: 3px; }
+        .api-links { background: #1a252f; padding: 15px; border-radius: 8px; border: 1px solid #2a3540; }
+        .api-links a { display: block; margin: 5px 0; color: #00d4ff; text-decoration: none; }
+        .api-links a:hover { color: #007acc; }
+        code { background: #2a3540; padding: 4px 8px; border-radius: 4px; color: #00d4ff; }
+        h1, h2, h3 { color: #00d4ff; }
     </style>
 </head>
 <body>
-    <h1>🎥 Video Autoscale Demo</h1>
-    <p>This Express.js video streaming service demonstrates Kubernetes HPA autoscaling.</p>
+    <h1>🎥 Video Autoscale Demo - API Testing</h1>
+    <p>This page provides direct API access for testing. Use the <a href="/" style="color: #00d4ff;">main application</a> for the full user interface.</p>
     
     <div class="video-container">
         <h2>📺 Demo Video Player</h2>
-        <video id="player" controls autoplay width="640" height="360" src="/api/v1/videos/stream/video1.mp4">
+        <video id="player" controls autoplay width="640" height="360" src="/video/master.m3u8">
             Your browser does not support the video tag.
         </video>
         <p><small>Open DevTools → Network to watch HLS segment requests.</small></p>
@@ -210,7 +262,7 @@ app.get("/", (req, res) => {
         function updateViewerCount() {
             viewerCount += Math.floor(Math.random() * 20) - 10;
             viewerCount = Math.max(50, viewerCount);
-            document.title = \`📺 Video Demo (👥 \${viewerCount} viewers)\`;
+            document.title = \`📺 API Demo (👥 \${viewerCount} viewers)\`;
         }
         
         setInterval(updateViewerCount, 3000);

@@ -1,0 +1,143 @@
+config:
+  target: http://localhost:8080
+  phases:
+    # Ramp-up phase: gradually increase load
+    - duration: 300  # 5 minutes
+      arrivalRate: 10
+      rampTo: 100
+      name: "Ramp-up phase"
+    
+    # Sustained load phase: maintain high load
+    - duration: 1200  # 20 minutes
+      arrivalRate: 100
+      name: "Sustained load phase"
+    
+    # Peak burst phase: simulate traffic spikes
+    - duration: 300   # 5 minutes
+      arrivalRate: 200
+      name: "Peak burst phase"
+    
+    # Cool-down phase: gradually decrease load
+    - duration: 300   # 5 minutes
+      arrivalRate: 200
+      rampTo: 10
+      name: "Cool-down phase"
+
+  environments:
+    local:
+      target: http://localhost:8080
+    kubernetes:
+      target: http://localhost:30080
+    docker:
+      target: http://localhost:8082
+
+  defaults:
+    headers:
+      User-Agent: "Artillery Load Tester"
+      Accept: "application/json, text/html"
+
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+
+scenarios:
+  # Video Browser Scenario (40% of users)
+  - name: "Video Browser"
+    weight: 40
+    flow:
+      - get:
+          url: "/"
+          name: "Load homepage"
+      - think: 2
+      - get:
+          url: "/videos"
+          name: "Browse videos page"
+      - think: 3
+      - get:
+          url: "/api/v1/videos?page={{ $randomInt(1, 5) }}&limit=20"
+          name: "Load video list API"
+      - think: 5
+
+  # Video Viewer Scenario (35% of users)
+  - name: "Video Viewer"
+    weight: 35
+    flow:
+      - get:
+          url: "/api/v1/videos"
+          name: "Get video list"
+          capture:
+            - json: "$.data[0].id"
+              as: "videoId"
+      - think: 1
+      - get:
+          url: "/watch/{{ videoId }}"
+          name: "Load video player page"
+      - think: 2
+      - get:
+          url: "/video/{{ videoId }}/master.m3u8"
+          name: "Load HLS master playlist"
+      - think: 1
+      # Simulate watching video segments
+      - loop:
+          - get:
+              url: "/video/{{ videoId }}/720p/segment_000.ts"
+              name: "Stream video segment 1"
+          - think: 2
+          - get:
+              url: "/video/{{ videoId }}/720p/segment_001.ts"
+              name: "Stream video segment 2"
+          - think: 2
+          - get:
+              url: "/video/{{ videoId }}/720p/segment_002.ts"
+              name: "Stream video segment 3"
+          - think: 2
+        count: 3
+
+  # API User Scenario (15% of users)
+  - name: "API User"
+    weight: 15
+    flow:
+      - get:
+          url: "/health"
+          name: "Health check"
+      - think: 1
+      - get:
+          url: "/api/v1/videos"
+          name: "API videos list"
+      - think: 2
+      - get:
+          url: "/metrics"
+          name: "Metrics endpoint"
+      - think: 3
+      - get:
+          url: "/system"
+          name: "System info"
+
+  # CPU Intensive Scenario (5% of users)
+  - name: "CPU Intensive"
+    weight: 5
+    flow:
+      - get:
+          url: "/burn?ms={{ $randomInt(500, 2000) }}"
+          name: "CPU burn test"
+      - think: 5
+      - get:
+          url: "/burn?ms={{ $randomInt(1000, 3000) }}"
+          name: "Extended CPU burn"
+
+  # Upload Simulation (5% of users)
+  - name: "Upload Simulation"
+    weight: 5
+    flow:
+      - get:
+          url: "/upload"
+          name: "Load upload page"
+      - think: 10  # Time to fill form
+      - post:
+          url: "/api/v1/videos/upload"
+          name: "Simulate video upload"
+          headers:
+            Content-Type: "multipart/form-data"
+          # Note: Artillery doesn't support file uploads easily,
+          # so this simulates the HTTP request structure
+      - think: 30  # Processing time
