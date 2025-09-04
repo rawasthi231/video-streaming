@@ -42,11 +42,15 @@ class VideoStreamingApp {
    */
   setupEventListeners() {
     // Handle navigation clicks
+    // Use closest() so clicks on child elements (icons, images, svg) still trigger navigation
     document.addEventListener('click', (e) => {
-      if (e.target.matches('[data-navigate]')) {
+      const navEl = e.target.closest && e.target.closest('[data-navigate]');
+      if (navEl) {
         e.preventDefault();
-        const path = e.target.getAttribute('data-navigate') || e.target.getAttribute('href');
-        router.navigate(path);
+        e.stopImmediatePropagation();
+        const path = navEl.getAttribute('data-navigate') || navEl.getAttribute('href');
+        if (path) router.navigate(path);
+        return;
       }
     });
 
@@ -57,6 +61,22 @@ class VideoStreamingApp {
         navLinks.classList.toggle('show');
       }
     });
+
+    // Handle clicks on video thumbnails / play overlay inside cards to navigate to watch page
+    document.addEventListener('click', (e) => {
+      const thumbEl = e.target.closest && e.target.closest('.video-card');
+      if (!thumbEl) return;
+
+      // If the card itself (or any child) has a data-navigate attribute this will be handled by the
+      // previous listener. This handler ensures that clicking anywhere on the thumbnail (image or play)
+      // navigates to the watch page even if markup changes.
+      const path = thumbEl.getAttribute('data-navigate');
+      if (path) {
+        // Prevent double-handling if the target is already an anchor
+        e.preventDefault();
+        router.navigate(path);
+      }
+    });
   }
 
   /**
@@ -65,9 +85,12 @@ class VideoStreamingApp {
   async renderHomePage() {
     try {
       const videosResponse = await api.getVideos(1, 8); // Get first 8 videos for hero
-      const videos = videosResponse.data || [];
-      
-      const featuredVideo = videos[0];
+  const videos = videosResponse.data || [];
+
+  // Prefer a completed video as the featured video so "Watch Now" doesn't attempt
+  // to play a video that's still processing. Fallback to the first video if none
+  // are marked completed.
+  const featuredVideo = videos.find(v => v.processingStatus === 'completed') || videos[0];
       
       document.getElementById('app').innerHTML = `
         <div class="main-content">
