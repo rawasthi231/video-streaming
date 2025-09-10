@@ -22,9 +22,8 @@ RUN npm run build
 # Production stage
 FROM node:22-alpine AS production
 
-# Install runtime dependencies including FFmpeg
+# Install minimal runtime dependencies
 RUN apk add --no-cache \
-    ffmpeg \
     tzdata \
     tini \
     && rm -rf /var/cache/apk/*
@@ -43,14 +42,8 @@ RUN npm ci --only=production --omit=dev && \
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Copy frontend assets
-COPY public ./public
-
-# Copy existing HLS content
-COPY hls ./hls
-
 # Create required directories and set permissions
-RUN mkdir -p uploads logs videos && \
+RUN mkdir -p logs && \
     chown -R nextjs:nodejs /app
 
 # Switch to non-root user
@@ -61,8 +54,6 @@ ENV NODE_ENV=production \
     PORT=8080 \
     BURN_DEFAULT_MS=200 \
     BURN_MAX_MS=5000 \
-    VIDEO_STORAGE_PATH=./videos \
-    HLS_OUTPUT_PATH=./hls \
     LOG_LEVEL=info
 
 # Health check

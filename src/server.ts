@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import cookieParser from "cookie-parser";
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import fs from "fs";
@@ -10,17 +11,22 @@ import path from "path";
 import { ENV, CONSTANTS } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { metricsMiddleware } from "./config/metrics.js";
+import { db } from "./config/database.js";
+import { redis } from "./config/redis.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import { concurrentUserMiddleware } from "./middlewares/concurrent-users.js";
 import { videoRoutes } from "./routes/video-routes.js";
 import { utilityRoutes } from "./routes/utility-routes.js";
+import { authRoutes } from "./routes/auth-routes.js";
+import { channelRoutes } from "./routes/channel-routes.js";
+import { userRoutes } from "./routes/user-routes.js";
 
 // Create Express application
 const app = express();
 
 // Ensure required directories exist
 async function ensureDirectories(): Promise<void> {
-  const dirs = ["uploads", "logs", ENV.VIDEO_STORAGE_PATH, ENV.HLS_OUTPUT_PATH];
+  const dirs = ["logs"];
 
   for (const dir of dirs) {
     try {
@@ -88,6 +94,9 @@ app.use(limiter);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// Cookie parsing middleware
+app.use(cookieParser(ENV.COOKIE_SECRET));
+
 // Metrics middleware
 app.use(metricsMiddleware());
 
@@ -149,128 +158,41 @@ app.use(
   })
 );
 
-// Static file serving for HLS content and video directories
-app.use(
-  "/video",
-  express.static(path.join(process.cwd(), "hls"), {
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith(".ts") || filePath.endsWith(".m4s")) {
-        res.setHeader("Cache-Control", "public, max-age=3600, immutable");
-        res.setHeader("Access-Control-Allow-Origin", "*");
-      } else if (filePath.endsWith(".m3u8")) {
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-        res.setHeader("Cache-Control", "public, max-age=5");
-        res.setHeader("Access-Control-Allow-Origin", "*");
-      } else if (filePath.endsWith(".jpg") || filePath.endsWith(".png")) {
-        res.setHeader("Content-Type", filePath.endsWith(".jpg") ? "image/jpeg" : "image/png");
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        res.setHeader("Access-Control-Allow-Origin", "*");
-      }
-    },
-  })
-);
-
-// Static files for frontend assets
-app.use("/css", express.static("public/css"));
-app.use("/js", express.static("public/js"));
-app.use("/images", express.static("public/images"));
-app.use("/fonts", express.static("public/fonts"));
-app.use("/static", express.static("src/static"));
-
-// Service worker
-app.get("/sw.js", (req, res) => {
-  res.sendFile(path.join(process.cwd(), "public", "sw.js"));
-});
+// Note: Video streaming and static files are now handled by external services
+// HLS content is served by the Java video processing service
+// Frontend assets are served by the separate React frontend service
 
 // API routes
+app.use(CONSTANTS.API_PREFIX + "/auth", authRoutes);
+app.use(CONSTANTS.API_PREFIX + "/users", userRoutes);
+app.use(CONSTANTS.API_PREFIX + "/channels", channelRoutes);
 app.use(CONSTANTS.API_PREFIX + "/videos", videoRoutes);
 
 // Utility routes (health, metrics, etc.)
 app.use("/", utilityRoutes);
 
-// Serve frontend for SPA routes
-const frontendRoutes = ["/", "/videos", "/upload", "/watch/*"];
-
-// Handle SPA routing - serve index.html for frontend routes
-app.get(frontendRoutes, (req, res) => {
-  res.sendFile(path.join(process.cwd(), "public", "index.html"));
-});
-
-// Legacy demo page (for API testing)
-app.get("/api-demo", (req, res) => {
-  res.setHeader("Content-Type", "text/html");
-  res.end(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Autoscale Demo - API Testing</title>
-    <link rel="icon" href="/static/favicon.ico" />
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #0f1419; color: #fff; }
-        .video-container { margin: 20px 0; }
-        .api-links { background: #1a252f; padding: 15px; border-radius: 8px; border: 1px solid #2a3540; }
-        .api-links a { display: block; margin: 5px 0; color: #00d4ff; text-decoration: none; }
-        .api-links a:hover { color: #007acc; }
-        code { background: #2a3540; padding: 4px 8px; border-radius: 4px; color: #00d4ff; }
-        h1, h2, h3 { color: #00d4ff; }
-    </style>
-</head>
-<body>
-    <h1>🎥 Video Autoscale Demo - API Testing</h1>
-    <p>This page provides direct API access for testing. Use the <a href="/" style="color: #00d4ff;">main application</a> for the full user interface.</p>
-    
-    <div class="video-container">
-        <h2>📺 Demo Video Player</h2>
-        <video id="player" controls autoplay width="640" height="360" src="/video/master.m3u8">
-            Your browser does not support the video tag.
-        </video>
-        <p><small>Open DevTools → Network to watch HLS segment requests.</small></p>
-    </div>
-
-    <div class="api-links">
-        <h3>🔗 API Endpoints</h3>
-        <a href="/docs" target="_blank">📖 API Documentation (Swagger)</a>
-        <a href="/metrics" target="_blank">📊 Prometheus Metrics</a>
-        <a href="/system" target="_blank">⚙️ System Information</a>
-        <a href="${CONSTANTS.API_PREFIX}/videos" target="_blank">🎬 Videos List</a>
-        <a href="/health" target="_blank">❤️ Health Check</a>
-        <a href="/ready" target="_blank">✅ Readiness Check</a>
-    </div>
-
-    <div class="api-links">
-        <h3>🔥 Load Testing</h3>
-        <p>Use these endpoints to trigger autoscaling:</p>
-        <code>curl "http://localhost:${ENV.PORT}/burn?ms=500"</code><br>
-        <code>curl "http://localhost:${ENV.PORT}/burn?ms=1000"</code><br>
-        <code>curl "http://localhost:${ENV.PORT}/burn?ms=2000"</code>
-        
-        <h4>🚀 Stress Test Commands</h4>
-        <code>
-        # Simulate traffic spike (run multiple terminals)<br>
-        for i in {1..50}; do curl "http://localhost:${ENV.PORT}/burn?ms=1000" & done<br><br>
-        # Watch HPA scaling<br>
-        watch kubectl get hpa
-        </code>
-    </div>
-
-    <script>
-        // Simple viewer count simulation
-        let viewerCount = Math.floor(Math.random() * 1000) + 100;
-        
-        function updateViewerCount() {
-            viewerCount += Math.floor(Math.random() * 20) - 10;
-            viewerCount = Math.max(50, viewerCount);
-            document.title = \`📺 API Demo (👥 \${viewerCount} viewers)\`;
-        }
-        
-        setInterval(updateViewerCount, 3000);
-        updateViewerCount();
-    </script>
-</body>
-</html>
-  `);
+// Simple API status endpoint for the streamlined service
+app.get("/", (req, res) => {
+  res.json({
+    service: "Video Streaming Auth API",
+    version: "2.0.0",
+    status: "active",
+    description: "Authentication and user management API for video streaming platform",
+    endpoints: {
+      docs: "/docs",
+      health: "/health",
+      metrics: "/metrics",
+      auth: "/api/v1/auth",
+      users: "/api/v1/users", 
+      channels: "/api/v1/channels",
+      videos: "/api/v1/videos"
+    },
+    externalServices: {
+      videoProcessing: ENV.VIDEO_PROCESSOR_URL || "Not configured",
+      frontend: "Separate React application"
+    },
+    timestamp: new Date().toISOString()
+  });
 });
 
 // 404 handler
@@ -279,9 +201,36 @@ app.use(notFoundHandler);
 // Global error handler (must be last)
 app.use(errorHandler);
 
+// Initialize database connections
+async function initializeDatabases(): Promise<void> {
+  try {
+    // Test PostgreSQL connection
+    const dbHealthy = await db.healthCheck();
+    if (!dbHealthy) {
+      throw new Error('PostgreSQL connection failed');
+    }
+    logger.info('PostgreSQL connected successfully');
+
+    // Test Redis connection
+    const redisHealthy = await redis.healthCheck();
+    if (!redisHealthy) {
+      throw new Error('Redis connection failed');
+    }
+    logger.info('Redis connected successfully');
+
+    logger.info('All database connections initialized successfully');
+  } catch (error) {
+    logger.error('Database initialization failed:', error);
+    throw error;
+  }
+}
+
 // Start server
 async function startServer(): Promise<void> {
   try {
+    // Initialize database connections
+    await initializeDatabases();
+
     // Ensure directories exist
     await ensureDirectories();
 
@@ -301,13 +250,22 @@ async function startServer(): Promise<void> {
     });
 
     // Graceful shutdown
-    const gracefulShutdown = (signal: string) => {
+    const gracefulShutdown = async (signal: string) => {
       logger.info(`Received ${signal}, starting graceful shutdown...`);
 
-      server.close((err) => {
+      server.close(async (err) => {
         if (err) {
           logger.error("Error during server shutdown", { error: err });
           process.exit(1);
+        }
+
+        try {
+          // Close database connections
+          await db.close();
+          await redis.close();
+          logger.info("Database connections closed successfully");
+        } catch (dbError) {
+          logger.error("Error closing database connections", { error: dbError });
         }
 
         logger.info("Server shut down successfully");

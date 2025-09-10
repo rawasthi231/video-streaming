@@ -1,41 +1,13 @@
 import { Router } from 'express';
-import multer from 'multer';
-import path from 'path';
 import { VideoController } from '../controllers/video-controller.js';
 import { asyncHandler } from '../middlewares/error-handler.js';
 import { validate, commonSchemas } from '../middlewares/validation.js';
-import { ENV, CONSTANTS } from '../config/env.js';
 
 const router = Router();
 const videoController = new VideoController();
 
-// Configure multer for video uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: ENV.MAX_FILE_SIZE,
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = CONSTANTS.VIDEO_FORMATS;
-    const fileExt = path.extname(file.originalname).slice(1).toLowerCase();
-    
-    if (allowedTypes.includes(fileExt)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Unsupported file format. Allowed: ${allowedTypes.join(', ')}`));
-    }
-  },
-});
+// Video processing is now handled by external Java service
+// This service provides API delegation endpoints
 
 /**
  * @swagger
@@ -106,34 +78,17 @@ router.get(
  * @swagger
  * /api/v1/videos/upload:
  *   post:
- *     summary: Upload a new video
+ *     summary: Upload a new video (delegates to external processing service)
  *     tags: [Videos]
- *     consumes:
- *       - multipart/form-data
- *     parameters:
- *       - in: formData
- *         name: video
- *         type: file
- *         required: true
- *         description: Video file to upload
- *       - in: formData
- *         name: title
- *         type: string
- *         description: Video title
- *       - in: formData
- *         name: description
- *         type: string
- *         description: Video description
+ *     description: This endpoint delegates video uploads to the external Java video processing service
  *     responses:
- *       201:
- *         description: Video uploaded successfully
- *       400:
- *         description: Invalid file or missing required fields
+ *       302:
+ *         description: Redirect to external video processing service
+ *       503:
+ *         description: External video processing service not configured
  */
 router.post(
   '/upload',
-  upload.single('video'),
-  validate({ body: commonSchemas.fileUpload }),
   asyncHandler(videoController.uploadVideo)
 );
 
@@ -141,8 +96,9 @@ router.post(
  * @swagger
  * /api/v1/videos/stream/{filename}:
  *   get:
- *     summary: Stream video file with range support
+ *     summary: Stream video file (redirects to external service)
  *     tags: [Videos]
+ *     description: This endpoint redirects video streaming requests to the external Java service
  *     parameters:
  *       - in: path
  *         name: filename
@@ -150,18 +106,11 @@ router.post(
  *         schema:
  *           type: string
  *         description: Video filename
- *       - in: header
- *         name: Range
- *         schema:
- *           type: string
- *         description: HTTP Range header for partial content
  *     responses:
- *       200:
- *         description: Video stream (full content)
- *       206:
- *         description: Video stream (partial content)
- *       404:
- *         description: Video file not found
+ *       302:
+ *         description: Redirect to external video streaming service
+ *       503:
+ *         description: External video service not configured
  */
 router.get(
   '/stream/:filename',
